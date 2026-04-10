@@ -1,129 +1,91 @@
-
 # ============================================================
-# TrendPulse - Task 3: Analyse the Data (Pandas + NumPy)
-# ============================================================
-# What this script does:
-#   1. Loads the cleaned CSV from Task 2
-#   2. Uses Pandas and NumPy to analyse the data
-#   3. Finds patterns: top categories, top authors, avg scores, etc.
-#   4. Saves a summary report as a CSV
+# Task 3 - Analysis with Pandas & NumPy (TrendPulse)
 # ============================================================
 
-import pandas as pd    # For working with tabular data (like Excel in Python)
-import numpy as np     # For numerical calculations
-import glob
+import pandas as pd
+import numpy as np
 import os
-from datetime import datetime
 
-# ── STEP 1: Load the cleaned CSV from Task 2 ────────────────────────────────
-print("Loading cleaned CSV file...")
+# -----------------------------
+# 1. LOAD AND EXPLORE
+# -----------------------------
 
-csv_files = glob.glob("data/trends_cleaned_*.csv")
+# Load the cleaned CSV produced by Task 2
+df = pd.read_csv("data/trends_clean.csv")
 
-if not csv_files:
-    print("ERROR: No cleaned CSV found in 'data/'. Run Task 2 first!")
-    exit()
+# Print shape: (rows, columns)
+print(f"Loaded data: {df.shape}")
 
-csv_file = sorted(csv_files)[-1]  # Pick the most recent one
-print(f"Found: {csv_file}")
+# Print first 5 rows for a quick sanity check
+print("\nFirst 5 rows:")
+print(df.head())
 
-df = pd.read_csv(csv_file)
-print(f"Loaded {len(df)} stories.")
-print(f"Columns: {list(df.columns)}\n")
+# Overall averages across all stories
+avg_score    = df["score"].mean()
+avg_comments = df["num_comments"].mean()
 
+print(f"\nAverage score   : {avg_score:,.3f}")
+print(f"Average comments: {avg_comments:,.3f}")
 
-# ── STEP 2: Basic overview ───────────────────────────────────────────────────
-print("=" * 50)
-print("BASIC OVERVIEW")
-print("=" * 50)
+# -----------------------------
+# 2. NUMPY STATISTICS
+# -----------------------------
 
-print(f"Total stories    : {len(df)}")
-print(f"Total categories : {df['category'].nunique()}")
-print(f"Total authors    : {df['author'].nunique()}")
-print(f"Date range       : {df['collected_at'].min()} → {df['collected_at'].max()}")
+# Convert score column to a NumPy array for explicit NumPy usage
+scores = df["score"].to_numpy()
 
+mean_score   = np.mean(scores)
+median_score = np.median(scores)
+std_score    = np.std(scores)
+max_score    = np.max(scores)
+min_score    = np.min(scores)
 
-print("\nData Shape:", df.shape)   # (rows, columns)
-print("Dimensions:", df.ndim)     # Should be 2 for DataFrame
-print("\nSummary Statistics:")
-print(df[['score', 'num_comments']].describe())  # Numeric column stats
+print("\n--- NumPy Stats ---")
+print(f"Mean score   : {mean_score:,.3f}")
+print(f"Median score : {median_score:,.3f}")
+print(f"Std deviation: {std_score:,.3f}")
+print(f"Max score    : {max_score}")
+print(f"Min score    : {min_score}")
 
+# Category with the most stories
+# value_counts() returns counts sorted descending; idxmax picks the top one
+category_counts  = df["category"].value_counts()
+top_category     = category_counts.idxmax()
+top_category_cnt = category_counts.max()
 
-# ── STEP 3: Stories per category ────────────────────────────────────────────
-print("\n" + "=" * 50)
-print("STORIES PER CATEGORY")
-print("=" * 50)
+print(f"\nMost stories in: {top_category} ({top_category_cnt} stories)")
 
-category_counts = df['category'].value_counts()
-for cat, count in category_counts.items():
-    print(f"  {cat:<15} : {count} stories")
+# Story with the most comments
+# idxmax() returns the row index of the highest num_comments value
+most_commented_idx   = df["num_comments"].idxmax()
+most_commented_title = df.loc[most_commented_idx, "title"]
+most_commented_count = df.loc[most_commented_idx, "num_comments"]
 
+print(f'Most commented story: "{most_commented_title}"  — {most_commented_count} comments')
 
-# ── STEP 4: Average score per category ──────────────────────────────────────
-print("\n" + "=" * 50)
-print("AVERAGE SCORE PER CATEGORY")
-print("=" * 50)
+# -----------------------------
+# 3. ADD NEW COLUMNS
+# -----------------------------
 
-avg_scores = df.groupby('category')['score'].mean().sort_values(ascending=False)
-for cat, avg in avg_scores.items():
-    print(f"  {cat:<15} : {avg:.1f} avg score")
+# engagement: how much discussion a story generates per upvote.
+# We add 1 to score to avoid division by zero for any score=0 edge cases.
+df["engagement"] = df["num_comments"] / (df["score"] + 1)
 
+# is_popular: True if this story's score is above the overall average score.
+# avg_score was computed above using pandas .mean(), consistent with the data.
+df["is_popular"] = df["score"] > avg_score
 
-# ── STEP 5: Top 5 stories overall (by score) ────────────────────────────────
-print("\n" + "=" * 50)
-print("TOP 5 STORIES (by upvote score)")
-print("=" * 50)
+# Quick check — show the two new columns alongside key fields
+print("\nSample with new columns:")
+print(df[["title", "score", "num_comments", "engagement", "is_popular"]].head())
 
-top5 = df.nlargest(5, 'score')[['title', 'category', 'score', 'num_comments']]
-for i, row in top5.iterrows():
-    print(f"  Score {row['score']:>5} | [{row['category']}] {row['title'][:55]}...")
-
-
-# ── STEP 6: Most active authors ──────────────────────────────────────────────
-print("\n" + "=" * 50)
-print("TOP 5 MOST ACTIVE AUTHORS")
-print("=" * 50)
-
-top_authors = df['author'].value_counts().head(5)
-for author, count in top_authors.items():
-    print(f"  {author:<20} : {count} posts")
-
-
-# ── STEP 7: NumPy stats on scores ───────────────────────────────────────────
-print("\n" + "=" * 50)
-print("SCORE STATISTICS (NumPy)")
-print("=" * 50)
-
-scores = np.array(df['score'])  # Convert to NumPy array for calculations
-
-print(f"  Min score     : {np.min(scores)}")
-print(f"  Max score     : {np.max(scores)}")
-print(f"  Mean score    : {np.mean(scores):.1f}")
-print(f"  Median score  : {np.median(scores):.1f}")
-print(f"  Std deviation : {np.std(scores):.1f}")  # How spread out scores are
-
-
-# ── STEP 8: Save analysis summary to CSV ────────────────────────────────────
-print("\nSaving analysis summary...")
-
-summary_rows = []
-
-for cat in df['category'].unique():
-    subset = df[df['category'] == cat]
-    summary_rows.append({
-        "category":       cat,
-        "story_count":    len(subset),
-        "avg_score":      round(subset['score'].mean(), 1),
-        "max_score":      subset['score'].max(),
-        "avg_comments":   round(subset['num_comments'].mean(), 1),
-        "top_story":      subset.loc[subset['score'].idxmax(), 'title'][:80],
-    })
-
-summary_df = pd.DataFrame(summary_rows).sort_values("avg_score", ascending=False)
+# -----------------------------
+# 4. SAVE THE RESULT
+# -----------------------------
 
 os.makedirs("data", exist_ok=True)
-today = datetime.now().strftime("%Y%m%d")
-summary_file = f"data/analysis_summary_{today}.csv"
-summary_df.to_csv(summary_file, index=False)
 
-print(f"Analysis summary saved to: {summary_file}")
+output_file = "data/trends_analysed.csv"
+df.to_csv(output_file, index=False)
+
+print(f"\nSaved to {output_file}")
